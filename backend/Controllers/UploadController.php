@@ -169,8 +169,26 @@ class UploadController
         $queueFile = $privateDir . '/notification_queue.json';
         $lockFile = $privateDir . '/notification_queue.lock';
         
-        $lock = fopen($lockFile, 'c');
-        flock($lock, LOCK_EX);
+        // Ensure private directory exists
+        if (!is_dir($privateDir)) {
+            @mkdir($privateDir, 0755, true);
+        }
+        
+        // Ensure lock file exists
+        if (!file_exists($lockFile)) {
+            @touch($lockFile);
+        }
+        
+        $lock = @fopen($lockFile, 'c');
+        if (!$lock) {
+            $this->logger->log("[".date('Y-m-d H:i:s')."] sendBatch: Could not open lock file: {$lockFile}");
+            return $response->json('Could not acquire lock', 500);
+        }
+        
+        if (!flock($lock, LOCK_EX)) {
+            fclose($lock);
+            return $response->json('Could not acquire lock', 500);
+        }
         
         $toSend = null;
         $folderKey = null;
@@ -192,8 +210,10 @@ class UploadController
             
             $toSend = $queue[$folderKey];
         } finally {
-            flock($lock, LOCK_UN);
-            fclose($lock);
+            if (is_resource($lock)) {
+                flock($lock, LOCK_UN);
+                fclose($lock);
+            }
         }
         
         if ($toSend && $this->notification) {
@@ -202,15 +222,16 @@ class UploadController
                 $this->logger->log("[".date('Y-m-d H:i:s')."] Manual batch notification DISPATCHED for " . count($toSend['files']) . " files to " . $toSend['folder']);
                 
                 // Only remove from queue after successful send
-                $lock = fopen($lockFile, 'c');
-                flock($lock, LOCK_EX);
-                try {
-                    $queue = json_decode(file_get_contents($queueFile), true) ?: [];
-                    unset($queue[$folderKey]);
-                    file_put_contents($queueFile, json_encode($queue), LOCK_EX);
-                } finally {
-                    flock($lock, LOCK_UN);
-                    fclose($lock);
+                $lock = @fopen($lockFile, 'c');
+                if ($lock && flock($lock, LOCK_EX)) {
+                    try {
+                        $queue = json_decode(file_get_contents($queueFile), true) ?: [];
+                        unset($queue[$folderKey]);
+                        file_put_contents($queueFile, json_encode($queue), LOCK_EX);
+                    } finally {
+                        flock($lock, LOCK_UN);
+                        fclose($lock);
+                    }
                 }
                 
                 return $response->json('Notification sent');
@@ -236,8 +257,27 @@ class UploadController
         $queueFile = $privateDir . '/notification_queue.json';
         $lockFile = $privateDir . '/notification_queue.lock';
         
-        $lock = fopen($lockFile, 'c');
-        flock($lock, LOCK_EX);
+        // Ensure private directory exists
+        if (!is_dir($privateDir)) {
+            @mkdir($privateDir, 0755, true);
+        }
+        
+        // Ensure lock file exists
+        if (!file_exists($lockFile)) {
+            @touch($lockFile);
+        }
+        
+        $lock = @fopen($lockFile, 'c');
+        if (!$lock) {
+            $this->logger->log("[{$timestamp}] queueNotification: Could not open lock file: {$lockFile}");
+            return;
+        }
+        
+        if (!flock($lock, LOCK_EX)) {
+            fclose($lock);
+            $this->logger->log("[{$timestamp}] queueNotification: Could not acquire lock");
+            return;
+        }
         
         try {
             $queue = [];
@@ -263,8 +303,10 @@ class UploadController
             $this->logger->log("[{$timestamp}] Upload: Queued {$filename} in {$uploadFolder}");
             
         } finally {
-            flock($lock, LOCK_UN);
-            fclose($lock);
+            if (is_resource($lock)) {
+                flock($lock, LOCK_UN);
+                fclose($lock);
+            }
         }
     }
 
