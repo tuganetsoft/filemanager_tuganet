@@ -198,6 +198,7 @@ export default {
         key: this.user.username,
         role: this.formFields.role,
         name: this.formFields.name,
+        email: this.formFields.email,
         username: this.formFields.username,
         homedir: this.formFields.homedir,
         password: this.formFields.password,
