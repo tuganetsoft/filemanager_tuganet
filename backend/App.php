@@ -29,7 +29,9 @@ class App
         $container->set(StreamedResponse::class, $sresponse);
 
         foreach ($config->get('services', []) as $key => $service) {
-            $container->set($key, $container->get($service['handler']));
+            $instance = $container->get($service['handler']);
+            $container->set($key, $instance);
+            $container->set($service['handler'], $instance);
             $container->get($key)->init(isset($service['config']) ? $service['config'] : []);
         }
 
