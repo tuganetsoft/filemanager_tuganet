@@ -125,42 +125,81 @@ class UploadController
             return $response->json('Chunk too big', 422);
         }
 
-            // if all the chunks are present, create final file and store it
-            if ($chunks_size >= $total_size) {
-                for ($i = 1; $i <= $total_chunks; ++$i) {
-                    $part = $this->tmpfs->readStream($prefix.$file_name.'.part'.$i);
-                    $this->tmpfs->write($file_name, $part['stream'], true);
-                }
-
-                $final = $this->tmpfs->readStream($file_name);
-                $res = $this->storage->store($destination, $final['filename'], $final['stream'], $overwrite_on_upload);
-
-                // cleanup
-                $this->tmpfs->remove($file_name);
-                foreach ($this->tmpfs->findAll($prefix.'*') as $expired_chunk) {
-                    $this->tmpfs->remove($expired_chunk['name']);
-                }
-
-                $timestamp = date('Y-m-d H:i:s');
-                $this->logger->log("[{$timestamp}] Upload: File stored successfully: {$final['filename']} to {$destination}");
-                
-                if ($res && $this->notification) {
-                    try {
-                        $uploadFolder = $this->normalizeUploadPath($this->userHomeDir, $destination);
-                        $storedFilename = $final['filename'];
-                        
-                        // Resumable.js doesn't natively send 'total files' in every chunk request
-                        // but it sends a unique identifier per batch.
-                        $this->queueNotification($uploadFolder, $storedFilename);
-                    } catch (\Exception $e) {
-                        $this->logger->log("[{$timestamp}] Upload: Notification error: " . $e->getMessage());
-                    }
-                }
-
-                return $res ? $response->json('Stored') : $response->json('Error storing file');
+        // if all the chunks are present, create final file and store it
+        if ($chunks_size >= $total_size) {
+            for ($i = 1; $i <= $total_chunks; ++$i) {
+                $part = $this->tmpfs->readStream($prefix.$file_name.'.part'.$i);
+                $this->tmpfs->write($file_name, $part['stream'], true);
             }
 
+            $final = $this->tmpfs->readStream($file_name);
+            $res = $this->storage->store($destination, $final['filename'], $final['stream'], $overwrite_on_upload);
+
+            // cleanup
+            $this->tmpfs->remove($file_name);
+            foreach ($this->tmpfs->findAll($prefix.'*') as $expired_chunk) {
+                $this->tmpfs->remove($expired_chunk['name']);
+            }
+
+            $timestamp = date('Y-m-d H:i:s');
+            $this->logger->log("[{$timestamp}] Upload: File stored successfully: {$final['filename']} to {$destination}");
+            
+            if ($res && $this->notification) {
+                try {
+                    $uploadFolder = $this->normalizeUploadPath($this->userHomeDir, $destination);
+                    $storedFilename = $final['filename'];
+                    $this->queueNotification($uploadFolder, $storedFilename);
+                } catch (\Exception $e) {
+                    $this->logger->log("[{$timestamp}] Upload: Notification error: " . $e->getMessage());
+                }
+            }
+
+            return $res ? $response->json('Stored') : $response->json('Error storing file');
+        }
+
         return $response->json('Uploaded');
+    }
+
+    public function sendBatch(Request $request, Response $response)
+    {
+        $uploadFolder = $request->input('folder');
+        if (!$uploadFolder) return $response->json('Folder missing', 422);
+
+        $privateDir = dirname(__DIR__, 2) . '/private';
+        $queueFile = $privateDir . '/notification_queue.json';
+        $lockFile = $privateDir . '/notification_queue.lock';
+        
+        $lock = fopen($lockFile, 'c');
+        flock($lock, LOCK_EX);
+        
+        $toSend = null;
+        try {
+            if (!file_exists($queueFile)) return $response->json('No pending notifications', 200);
+            $queue = json_decode(file_get_contents($queueFile), true) ?: [];
+            
+            $folderKey = md5($uploadFolder);
+            if (!isset($queue[$folderKey])) return $response->json('No pending notifications for this folder', 200);
+            
+            $toSend = $queue[$folderKey];
+            unset($queue[$folderKey]);
+            file_put_contents($queueFile, json_encode($queue), LOCK_EX);
+        } finally {
+            flock($lock, LOCK_UN);
+            fclose($lock);
+        }
+        
+        if ($toSend && $this->notification) {
+            try {
+                $this->notification->notifyUpload($toSend['folder'], $toSend['files']);
+                $this->logger->log("[".date('Y-m-d H:i:s')."] Manual batch notification DISPATCHED for " . count($toSend['files']) . " files to " . $toSend['folder']);
+                return $response->json('Notification sent');
+            } catch (\Exception $e) {
+                $this->logger->log("[".date('Y-m-d H:i:s')."] Manual batch notification error: " . $e->getMessage());
+                return $response->json('Error sending notification', 500);
+            }
+        }
+        
+        return $response->json('Not sent');
     }
 
     protected function queueNotification(string $uploadFolder, string $filename): void
@@ -199,54 +238,6 @@ class UploadController
         } finally {
             flock($lock, LOCK_UN);
             fclose($lock);
-        }
-
-        // Use register_shutdown_function to send the email at the very end of the request
-        // We wait a few seconds after the last file is received.
-        register_shutdown_function([$this, 'checkAndSendBatch'], $uploadFolder);
-    }
-
-    public function checkAndSendBatch(string $uploadFolder): void
-    {
-        $batchWindow = 3; // Wait 3 seconds of silence
-        sleep($batchWindow);
-        
-        $privateDir = dirname(__DIR__, 2) . '/private';
-        $queueFile = $privateDir . '/notification_queue.json';
-        $lockFile = $privateDir . '/notification_queue.lock';
-        
-        $lock = fopen($lockFile, 'c');
-        flock($lock, LOCK_EX);
-        
-        $toSend = null;
-        try {
-            if (!file_exists($queueFile)) return;
-            $queue = json_decode(file_get_contents($queueFile), true) ?: [];
-            
-            $folderKey = md5($uploadFolder);
-            if (!isset($queue[$folderKey])) return;
-            
-            $entry = $queue[$folderKey];
-            $now = time();
-            
-            // If no new files were added to this folder's queue during our sleep
-            if ($now - $entry['last_upload'] >= $batchWindow) {
-                $toSend = $entry;
-                unset($queue[$folderKey]);
-                file_put_contents($queueFile, json_encode($queue), LOCK_EX);
-            }
-        } finally {
-            flock($lock, LOCK_UN);
-            fclose($lock);
-        }
-        
-        if ($toSend && $this->notification) {
-            try {
-                $this->notification->notifyUpload($toSend['folder'], $toSend['files']);
-                $this->logger->log("[".date('Y-m-d H:i:s')."] Batch notification DISPATCHED for " . count($toSend['files']) . " files to " . $toSend['folder']);
-            } catch (\Exception $e) {
-                $this->logger->log("[".date('Y-m-d H:i:s')."] Batch notification error: " . $e->getMessage());
-            }
         }
     }
 
