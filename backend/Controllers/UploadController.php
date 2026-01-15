@@ -225,8 +225,8 @@ class UploadController
     
     protected function getPrivateDir(): string
     {
-        // Go up 3 levels from Controllers to reach project root
-        return dirname(__DIR__, 3) . '/private';
+        // Go up 2 levels from Controllers to reach project root (/home/runner/workspace)
+        return dirname(__DIR__, 2) . '/private';
     }
 
     protected function queueNotification(string $uploadFolder, string $filename): void
