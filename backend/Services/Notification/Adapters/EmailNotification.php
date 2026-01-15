@@ -84,7 +84,8 @@ class EmailNotification implements Service, NotificationInterface
         $matchedUsers = [];
         
         // Read users directly from JSON file to avoid DI issues
-        $usersFile = dirname(__DIR__, 3) . '/private/users.json';
+        // __DIR__ = backend/Services/Notification/Adapters, need to go up 4 levels to reach project root
+        $usersFile = dirname(__DIR__, 4) . '/private/users.json';
         $this->logger->log("[{$timestamp}] MATCHING: Reading users from file: {$usersFile}");
         
         if (!file_exists($usersFile)) {
