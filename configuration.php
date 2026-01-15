@@ -13,7 +13,7 @@ return [
         'enabled' => true, // set to true to enable email notifications
         'host' => 'cronos.tuganetcloud.com',
         'port' => 25,
-        'username' => 'joaquimsa@tuganet.pt',
+        'username' => 'tuganet@tuganet.pt',
         'password' => 'Pass_4096',
         'encryption' => '', // 'tls', 'ssl', or '' for none
         'from_email' => 'tuganet@tuganet.pt',

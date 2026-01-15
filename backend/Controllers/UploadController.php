@@ -56,8 +56,10 @@ class UploadController
         $this->storage = $storage;
         $this->storage->setPathPrefix($this->userHomeDir);
         
-        $timestamp = date('Y-m-d H:i:s');
-        $this->logger->log("[{$timestamp}] UploadController: Initialized, notification service is " . ($this->notification ? 'AVAILABLE' : 'NULL'));
+        // Flush any pending notifications from previous batch uploads
+        if ($this->notification) {
+            $this->flushNotifications();
+        }
     }
 
     public function chunkCheck(Request $request, Response $response)
@@ -146,26 +148,135 @@ class UploadController
 
             $timestamp = date('Y-m-d H:i:s');
             $this->logger->log("[{$timestamp}] Upload: File stored successfully: {$final['filename']} to {$destination}");
-            $this->logger->log("[{$timestamp}] Upload: Notification service is " . ($this->notification ? 'AVAILABLE' : 'NULL'));
             
             if ($res && $this->notification) {
                 try {
                     $uploadFolder = $this->normalizeUploadPath($this->userHomeDir, $destination);
                     $storedFilename = $final['filename'];
-                    $this->logger->log("[{$timestamp}] Upload: Calling notifyUpload for folder: {$uploadFolder}, file: {$storedFilename}");
-                    $this->notification->notifyUpload($uploadFolder, [$storedFilename]);
-                    $this->logger->log("[{$timestamp}] Upload: notifyUpload completed");
+                    $this->queueNotification($uploadFolder, $storedFilename);
                 } catch (\Exception $e) {
                     $this->logger->log("[{$timestamp}] Upload: Notification error: " . $e->getMessage());
                 }
-            } else if (!$this->notification) {
-                $this->logger->log("[{$timestamp}] Upload: Skipping notification - service not available");
             }
 
             return $res ? $response->json('Stored') : $response->json('Error storing file');
         }
 
         return $response->json('Uploaded');
+    }
+
+    protected function queueNotification(string $uploadFolder, string $filename): void
+    {
+        $timestamp = date('Y-m-d H:i:s');
+        $batchWindow = 5; // seconds to wait for more files before sending
+        $privateDir = dirname(__DIR__, 2) . '/private';
+        $queueFile = $privateDir . '/notification_queue.json';
+        
+        // Use file locking for safe concurrent access
+        $lockFile = $privateDir . '/notification_queue.lock';
+        $lock = fopen($lockFile, 'c');
+        flock($lock, LOCK_EX);
+        
+        try {
+            // Read existing queue
+            $queue = [];
+            if (file_exists($queueFile)) {
+                $queue = json_decode(file_get_contents($queueFile), true) ?: [];
+            }
+            
+            $folderKey = md5($uploadFolder);
+            $now = time();
+            
+            // Add file to queue for this folder
+            if (!isset($queue[$folderKey])) {
+                $queue[$folderKey] = [
+                    'folder' => $uploadFolder,
+                    'files' => [],
+                    'first_upload' => $now,
+                    'last_upload' => $now
+                ];
+            }
+            
+            $queue[$folderKey]['files'][] = $filename;
+            $queue[$folderKey]['last_upload'] = $now;
+            
+            // Process any OTHER folders whose batch window has expired (not current folder)
+            $toSend = [];
+            foreach ($queue as $key => $entry) {
+                if ($key !== $folderKey) {
+                    $timeSinceLastUpload = $now - $entry['last_upload'];
+                    if ($timeSinceLastUpload >= $batchWindow) {
+                        $toSend[$key] = $entry;
+                        unset($queue[$key]);
+                    }
+                }
+            }
+            
+            // Save updated queue
+            file_put_contents($queueFile, json_encode($queue), LOCK_EX);
+            
+            $this->logger->log("[{$timestamp}] Upload: Queued notification for {$filename} in {$uploadFolder} (queue has " . count($queue) . " pending folders)");
+            
+        } finally {
+            flock($lock, LOCK_UN);
+            fclose($lock);
+        }
+        
+        // Send notifications for expired batches (outside the lock)
+        foreach ($toSend as $entry) {
+            try {
+                $this->notification->notifyUpload($entry['folder'], $entry['files']);
+                $this->logger->log("[{$timestamp}] Batch notification sent for " . count($entry['files']) . " files to " . $entry['folder']);
+            } catch (\Exception $e) {
+                $this->logger->log("[{$timestamp}] Batch notification error: " . $e->getMessage());
+            }
+        }
+    }
+    
+    public function flushNotifications(): void
+    {
+        // This method can be called by any request to flush pending notifications
+        $batchWindow = 5;
+        $privateDir = dirname(__DIR__, 2) . '/private';
+        $queueFile = $privateDir . '/notification_queue.json';
+        $lockFile = $privateDir . '/notification_queue.lock';
+        
+        if (!file_exists($queueFile)) return;
+        
+        $lock = fopen($lockFile, 'c');
+        if (!flock($lock, LOCK_EX | LOCK_NB)) {
+            fclose($lock);
+            return; // Skip if another process is handling it
+        }
+        
+        try {
+            $queue = json_decode(file_get_contents($queueFile), true) ?: [];
+            $now = time();
+            $toSend = [];
+            
+            foreach ($queue as $key => $entry) {
+                $timeSinceLastUpload = $now - $entry['last_upload'];
+                if ($timeSinceLastUpload >= $batchWindow) {
+                    $toSend[$key] = $entry;
+                    unset($queue[$key]);
+                }
+            }
+            
+            file_put_contents($queueFile, json_encode($queue), LOCK_EX);
+            
+        } finally {
+            flock($lock, LOCK_UN);
+            fclose($lock);
+        }
+        
+        foreach ($toSend as $entry) {
+            try {
+                $this->notification->notifyUpload($entry['folder'], $entry['files']);
+                $this->logger->log("[".date('Y-m-d H:i:s')."] Flushed batch notification for " . count($entry['files']) . " files to " . $entry['folder']);
+            } catch (\Exception $e) {
+                $this->logger->log("[".date('Y-m-d H:i:s')."] Flush notification error: " . $e->getMessage());
+            }
+        }
     }
 
     protected function normalizeUploadPath(string $homeDir, string $destination): string
