@@ -82,15 +82,36 @@ class EmailNotification implements Service, NotificationInterface
     {
         $timestamp = date('Y-m-d H:i:s');
         $matchedUsers = [];
-        $auth = $auth ?: $this->getAuth();
-        $allUsers = $auth->allUsers();
         
-        // Convert to array to allow counting and multiple iterations
-        $usersArray = [];
-        foreach ($allUsers as $u) { 
-            $usersArray[] = $u; 
+        // Read users directly from JSON file to avoid DI issues
+        $usersFile = dirname(__DIR__, 3) . '/private/users.json';
+        $this->logger->log("[{$timestamp}] MATCHING: Reading users from file: {$usersFile}");
+        
+        if (!file_exists($usersFile)) {
+            $this->logger->log("[{$timestamp}] MATCHING: Users file not found!");
+            return [];
         }
-        $this->logger->log("[{$timestamp}] MATCHING: Total users from allUsers(): " . count($usersArray));
+        
+        $usersData = json_decode(file_get_contents($usersFile), true);
+        if (!is_array($usersData)) {
+            $this->logger->log("[{$timestamp}] MATCHING: Failed to parse users JSON");
+            return [];
+        }
+        
+        // Convert raw user data to User objects
+        $usersArray = [];
+        foreach ($usersData as $userData) {
+            $user = new \Filegator\Services\Auth\User();
+            $user->setUsername($userData['username'] ?? '');
+            $user->setName($userData['name'] ?? '');
+            $user->setEmail($userData['email'] ?? '');
+            $user->setRole($userData['role'] ?? '');
+            $user->setHomedir($userData['homedir'] ?? '');
+            $user->setPermissions($userData['permissions'] ?? '', true);
+            $usersArray[] = $user;
+        }
+        
+        $this->logger->log("[{$timestamp}] MATCHING: Total users from file: " . count($usersArray));
         
         $targetPath = '/' . trim($uploadPath, '/');
         if ($targetPath !== '/') {
