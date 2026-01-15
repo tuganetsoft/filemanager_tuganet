@@ -211,7 +211,7 @@ class EmailNotification implements Service, NotificationInterface
             $mail->addAddress($user->getEmail(), $user->getName());
 
             $mail->isHTML(true);
-            $mail->Subject = 'New files uploaded to your folder';
+            $mail->Subject = $this->smtpConfig['subject'] ?? 'New files uploaded to your folder';
             
             $fileList = implode("\n", array_map(function($file) {
                 return "- " . htmlspecialchars($file);
