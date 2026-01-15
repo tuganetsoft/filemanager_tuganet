@@ -31,18 +31,32 @@ class EmailNotification implements Service, NotificationInterface
 
     public function notifyUpload(string $uploadPath, array $files): void
     {
-        if (empty($this->smtpConfig['enabled']) || empty($files)) {
+        $timestamp = date('Y-m-d H:i:s');
+        $this->logger->log("[{$timestamp}] NOTIFICATION: notifyUpload called for path: {$uploadPath}, files: " . implode(', ', $files));
+        
+        if (empty($this->smtpConfig['enabled'])) {
+            $this->logger->log("[{$timestamp}] NOTIFICATION: SMTP is disabled, skipping email");
+            return;
+        }
+        
+        if (empty($files)) {
+            $this->logger->log("[{$timestamp}] NOTIFICATION: No files provided, skipping email");
             return;
         }
 
         $users = $this->findUsersForPath($uploadPath);
+        $this->logger->log("[{$timestamp}] NOTIFICATION: Found " . count($users) . " matching user(s) for path: {$uploadPath}");
         
         if (empty($users)) {
+            $this->logger->log("[{$timestamp}] NOTIFICATION: No users matched for this path");
             return;
         }
 
         foreach ($users as $user) {
+            $this->logger->log("[{$timestamp}] NOTIFICATION: Checking user: {$user->getUsername()}, email: {$user->getEmail()}, homedir: {$user->getHomeDir()}");
+            
             if (empty($user->getEmail())) {
+                $this->logger->log("[{$timestamp}] NOTIFICATION: User {$user->getUsername()} has no email, skipping");
                 continue;
             }
             
@@ -91,8 +105,17 @@ class EmailNotification implements Service, NotificationInterface
 
     protected function sendUploadNotification($user, string $uploadPath, array $files): void
     {
+        $timestamp = date('Y-m-d H:i:s');
+        
         try {
+            $this->logger->log("[{$timestamp}] SMTP: Starting email send to {$user->getEmail()}");
+            $this->logger->log("[{$timestamp}] SMTP: Host: {$this->smtpConfig['host']}, Port: {$this->smtpConfig['port']}, Encryption: " . ($this->smtpConfig['encryption'] ?? 'none'));
+            
             $mail = new PHPMailer(true);
+            $mail->SMTPDebug = 2;
+            $mail->Debugoutput = function($str, $level) use ($timestamp) {
+                $this->logger->log("[{$timestamp}] SMTP DEBUG [{$level}]: " . trim($str));
+            };
 
             $mail->isSMTP();
             $mail->Host = $this->smtpConfig['host'] ?? '';
@@ -106,10 +129,15 @@ class EmailNotification implements Service, NotificationInterface
                 $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
             } elseif ($encryption === 'ssl') {
                 $mail->SMTPSecure = PHPMailer::ENCRYPTION_SMTPS;
+            } else {
+                $mail->SMTPSecure = '';
+                $mail->SMTPAutoTLS = false;
             }
 
             $fromEmail = $this->smtpConfig['from_email'] ?? 'noreply@example.com';
             $fromName = $this->smtpConfig['from_name'] ?? 'FileGator';
+            
+            $this->logger->log("[{$timestamp}] SMTP: From: {$fromEmail} ({$fromName}), To: {$user->getEmail()} ({$user->getName()})");
             
             $mail->setFrom($fromEmail, $fromName);
             $mail->addAddress($user->getEmail(), $user->getName());
@@ -126,12 +154,20 @@ class EmailNotification implements Service, NotificationInterface
                              implode("\n", array_map(function($f) { return "- " . $f; }, $files)) . 
                              "\n\nRegards,\nFileGator";
 
+            $this->logger->log("[{$timestamp}] SMTP: Attempting to send email...");
+            $startTime = microtime(true);
+            
             $mail->send();
             
-            $this->logger->log("Email notification sent to {$user->getEmail()} for upload to {$uploadPath}");
+            $duration = round((microtime(true) - $startTime) * 1000, 2);
+            $this->logger->log("[{$timestamp}] SMTP: SUCCESS! Email sent to {$user->getEmail()} in {$duration}ms");
             
         } catch (Exception $e) {
-            $this->logger->log("Failed to send email notification to {$user->getEmail()}: " . $e->getMessage());
+            $this->logger->log("[{$timestamp}] SMTP: FAILED to send email to {$user->getEmail()}");
+            $this->logger->log("[{$timestamp}] SMTP: Error: " . $e->getMessage());
+            if (isset($mail)) {
+                $this->logger->log("[{$timestamp}] SMTP: ErrorInfo: " . $mail->ErrorInfo);
+            }
         }
     }
 
