@@ -29,6 +29,20 @@
           </div>
           <hr>
         </div>
+        <div v-if="!activeUploads && allUploadsComplete && !notificationSent" class="notification-section">
+          <div class="is-flex is-justify-between is-align-items-center">
+            <span class="notification-text">{{ lang('Send email notification?') }}</span>
+            <button class="button is-primary is-small" @click="sendNotification" :disabled="sendingNotification">
+              <span v-if="sendingNotification">{{ lang('Sending...') }}</span>
+              <span v-else>{{ lang('Send Notification') }}</span>
+            </button>
+          </div>
+          <hr>
+        </div>
+        <div v-if="notificationSent" class="notification-sent">
+          <span class="has-text-success">{{ lang('Notification sent!') }}</span>
+          <hr>
+        </div>
         <div v-if="progressVisible" class="progress-items">
           <div v-for="(file, index) in resumable.files.slice().reverse()" :key="index">
             <div>
@@ -44,20 +58,6 @@
               </div>
             </div>
           </div>
-        </div>
-        <div v-if="!activeUploads && allUploadsComplete && !notificationSent" class="notification-section">
-          <hr>
-          <div class="is-flex is-justify-between is-align-items-center">
-            <span class="notification-text">{{ lang('Send email notification?') }}</span>
-            <button class="button is-primary is-small" @click="sendNotification" :disabled="sendingNotification">
-              <span v-if="sendingNotification">{{ lang('Sending...') }}</span>
-              <span v-else>{{ lang('Send Notification') }}</span>
-            </button>
-          </div>
-        </div>
-        <div v-if="notificationSent" class="notification-sent">
-          <hr>
-          <span class="has-text-success">{{ lang('Notification sent!') }}</span>
         </div>
       </div>
     </div>
