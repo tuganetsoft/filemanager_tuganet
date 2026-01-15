@@ -112,6 +112,11 @@ class JsonFile implements Service, AuthInterface
 
                 $this->saveUsers($all_users);
 
+                // clear session cache if updating self
+                if ($this->user() && $this->user()->getUsername() == $u['username']) {
+                    $this->store($this->mapToUserObject($u));
+                }
+
                 return $this->find($user->getUsername()) ?: $user;
             }
         }
