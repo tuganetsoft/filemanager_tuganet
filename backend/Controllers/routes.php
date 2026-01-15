@@ -195,6 +195,17 @@ return [
     ],
     [
         'route' => [
+            'POST', '/sendbatch', '\Filegator\Controllers\UploadController@sendBatch',
+        ],
+        'roles' => [
+            'guest', 'user', 'admin',
+        ],
+        'permissions' => [
+            'upload',
+        ],
+    ],
+    [
+        'route' => [
             'GET', '/download', '\Filegator\Controllers\DownloadController@download',
         ],
         'roles' => [

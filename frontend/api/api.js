@@ -224,6 +224,15 @@ const api = {
         .catch(error => reject(error))
     })
   },
+  sendBatchNotification (params) {
+    return new Promise((resolve, reject) => {
+      axios.post('sendbatch', {
+        folder: params.folder,
+      })
+        .then(res => resolve(res.data))
+        .catch(error => reject(error))
+    })
+  },
 }
 
 export default api

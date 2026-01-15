@@ -45,6 +45,20 @@
             </div>
           </div>
         </div>
+        <div v-if="!activeUploads && hasCompletedUploads && !notificationSent" class="notification-section">
+          <hr>
+          <div class="is-flex is-justify-between is-align-items-center">
+            <span class="notification-text">{{ lang('Send email notification?') }}</span>
+            <button class="button is-primary is-small" @click="sendNotification" :disabled="sendingNotification">
+              <span v-if="sendingNotification">{{ lang('Sending...') }}</span>
+              <span v-else>{{ lang('Send Notification') }}</span>
+            </button>
+          </div>
+        </div>
+        <div v-if="notificationSent" class="notification-sent">
+          <hr>
+          <span class="has-text-success">{{ lang('Notification sent!') }}</span>
+        </div>
       </div>
     </div>
   </div>
@@ -67,6 +81,10 @@ export default {
       paused: false,
       progressVisible: false,
       progress: 0,
+      hasCompletedUploads: false,
+      notificationSent: false,
+      sendingNotification: false,
+      uploadFolder: null,
     }
   },
   computed: {
@@ -127,6 +145,8 @@ export default {
 
     this.resumable.on('fileSuccess', (file) => {
       file.file.uploadingError = false
+      this.hasCompletedUploads = true
+      this.uploadFolder = this.$store.state.cwd.location
       this.$forceUpdate()
       if (this.can('read')) {
         api.getDir({
@@ -156,12 +176,20 @@ export default {
           onConfirm: () => {
             this.resumable.cancel()
             this.visible = false
+            this.resetNotificationState()
           }
         })
       } else {
         this.visible = false
         this.resumable.cancel()
+        this.resetNotificationState()
       }
+    },
+    resetNotificationState() {
+      this.hasCompletedUploads = false
+      this.notificationSent = false
+      this.sendingNotification = false
+      this.uploadFolder = null
     },
     toggleWindow() {
       this.progressVisible = ! this.progressVisible
@@ -174,6 +202,24 @@ export default {
         this.resumable.pause()
         this.paused = true
       }
+    },
+    sendNotification() {
+      if (!this.uploadFolder) return
+      this.sendingNotification = true
+      api.sendBatchNotification({ folder: this.uploadFolder })
+        .then(() => {
+          this.notificationSent = true
+          this.sendingNotification = false
+          this.$notification.open({
+            message: this.lang('Email notification sent successfully'),
+            type: 'is-success',
+            queue: false,
+          })
+        })
+        .catch(error => {
+          this.sendingNotification = false
+          this.handleError(error)
+        })
     },
   },
 }
@@ -196,6 +242,17 @@ export default {
   overflow-y: scroll;
   margin-right: -100px;
   padding-right: 100px;
-  max-height: 300px; /* fix this */
+  max-height: 300px;
+}
+.notification-section {
+  margin-top: 10px;
+}
+.notification-text {
+  font-size: 0.9em;
+  color: #666;
+}
+.notification-sent {
+  margin-top: 10px;
+  text-align: center;
 }
 </style>
