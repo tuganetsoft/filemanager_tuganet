@@ -75,6 +75,11 @@ class Router implements Service
             break;
         }
 
-        $this->container->call([$this->container->get($controller), $action], $params);
+        try {
+            $controllerInstance = $this->container->get($controller);
+        } catch (\Exception $e) {
+            $controllerInstance = $this->container->make($controller);
+        }
+        $this->container->call([$controllerInstance, $action], $params);
     }
 }

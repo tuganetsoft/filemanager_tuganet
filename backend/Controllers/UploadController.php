@@ -41,6 +41,17 @@ class UploadController
         $this->auth = $auth;
         $this->tmpfs = $tmpfs;
         $this->logger = $logger;
+
+        // If notification wasn't injected, try to resolve it from the container manually
+        if (!$notification) {
+            try {
+                $container = \Filegator\Container\Container::getInstance();
+                $notification = $container->get(NotificationInterface::class);
+            } catch (\Exception $e) {
+                // Keep it null if resolution fails
+            }
+        }
+        
         $this->notification = $notification;
 
         $user = $this->auth->user() ?: $this->auth->getGuest();
@@ -50,7 +61,7 @@ class UploadController
         $this->storage->setPathPrefix($this->userHomeDir);
         
         $timestamp = date('Y-m-d H:i:s');
-        $this->logger->log("[{$timestamp}] UploadController: Initialized, notification service is " . ($notification ? 'AVAILABLE' : 'NULL'));
+        $this->logger->log("[{$timestamp}] UploadController: Initialized, notification service is " . ($this->notification ? 'AVAILABLE' : 'NULL'));
     }
 
     public function chunkCheck(Request $request, Response $response)
