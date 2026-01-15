@@ -32,7 +32,7 @@ class UploadController
 
     protected $userHomeDir;
 
-    public function __construct(Config $config, AuthInterface $auth, Filesystem $storage, TmpfsInterface $tmpfs, NotificationInterface $notification)
+    public function __construct(Config $config, AuthInterface $auth, Filesystem $storage, TmpfsInterface $tmpfs, NotificationInterface $notification = null)
     {
         $this->config = $config;
         $this->auth = $auth;
@@ -130,7 +130,7 @@ class UploadController
                 $this->tmpfs->remove($expired_chunk['name']);
             }
 
-            if ($res) {
+            if ($res && $this->notification) {
                 try {
                     $uploadFolder = $this->normalizeUploadPath($this->userHomeDir, $destination);
                     $storedFilename = $final['filename'];
