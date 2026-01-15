@@ -45,7 +45,7 @@
             </div>
           </div>
         </div>
-        <div v-if="!activeUploads && hasCompletedUploads && !notificationSent" class="notification-section">
+        <div v-if="!activeUploads && allUploadsComplete && !notificationSent" class="notification-section">
           <hr>
           <div class="is-flex is-justify-between is-align-items-center">
             <span class="notification-text">{{ lang('Send email notification?') }}</span>
@@ -90,6 +90,12 @@ export default {
   computed: {
     activeUploads() {
       return this.resumable.files.length > 0 && this.resumable.progress() < 1
+    },
+    allUploadsComplete() {
+      if (!this.hasCompletedUploads) return false
+      if (this.resumable.files.length === 0) return false
+      // Check if all files are complete (progress = 1) and no errors
+      return this.resumable.files.every(file => file.isComplete() && !file.file.uploadingError)
     },
   },
   watch: {

@@ -165,7 +165,7 @@ class UploadController
         $uploadFolder = $request->input('folder');
         if (!$uploadFolder) return $response->json('Folder missing', 422);
 
-        $privateDir = dirname(__DIR__, 2) . '/private';
+        $privateDir = $this->getPrivateDir();
         $queueFile = $privateDir . '/notification_queue.json';
         $lockFile = $privateDir . '/notification_queue.lock';
         
@@ -173,16 +173,24 @@ class UploadController
         flock($lock, LOCK_EX);
         
         $toSend = null;
+        $folderKey = null;
+        $queue = [];
         try {
-            if (!file_exists($queueFile)) return $response->json('No pending notifications', 200);
+            if (!file_exists($queueFile)) {
+                flock($lock, LOCK_UN);
+                fclose($lock);
+                return $response->json('No pending notifications', 200);
+            }
             $queue = json_decode(file_get_contents($queueFile), true) ?: [];
             
             $folderKey = md5($uploadFolder);
-            if (!isset($queue[$folderKey])) return $response->json('No pending notifications for this folder', 200);
+            if (!isset($queue[$folderKey])) {
+                flock($lock, LOCK_UN);
+                fclose($lock);
+                return $response->json('No pending notifications for this folder', 200);
+            }
             
             $toSend = $queue[$folderKey];
-            unset($queue[$folderKey]);
-            file_put_contents($queueFile, json_encode($queue), LOCK_EX);
         } finally {
             flock($lock, LOCK_UN);
             fclose($lock);
@@ -192,20 +200,39 @@ class UploadController
             try {
                 $this->notification->notifyUpload($toSend['folder'], $toSend['files']);
                 $this->logger->log("[".date('Y-m-d H:i:s')."] Manual batch notification DISPATCHED for " . count($toSend['files']) . " files to " . $toSend['folder']);
+                
+                // Only remove from queue after successful send
+                $lock = fopen($lockFile, 'c');
+                flock($lock, LOCK_EX);
+                try {
+                    $queue = json_decode(file_get_contents($queueFile), true) ?: [];
+                    unset($queue[$folderKey]);
+                    file_put_contents($queueFile, json_encode($queue), LOCK_EX);
+                } finally {
+                    flock($lock, LOCK_UN);
+                    fclose($lock);
+                }
+                
                 return $response->json('Notification sent');
             } catch (\Exception $e) {
                 $this->logger->log("[".date('Y-m-d H:i:s')."] Manual batch notification error: " . $e->getMessage());
-                return $response->json('Error sending notification', 500);
+                return $response->json('Error sending notification: ' . $e->getMessage(), 500);
             }
         }
         
         return $response->json('Not sent');
     }
+    
+    protected function getPrivateDir(): string
+    {
+        // Go up 3 levels from Controllers to reach project root
+        return dirname(__DIR__, 3) . '/private';
+    }
 
     protected function queueNotification(string $uploadFolder, string $filename): void
     {
         $timestamp = date('Y-m-d H:i:s');
-        $privateDir = dirname(__DIR__, 2) . '/private';
+        $privateDir = $this->getPrivateDir();
         $queueFile = $privateDir . '/notification_queue.json';
         $lockFile = $privateDir . '/notification_queue.lock';
         
