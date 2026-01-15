@@ -17,7 +17,7 @@ return [
         'password' => 'Pass_4096',
         'encryption' => '', // 'tls', 'ssl', or '' for none
         'from_email' => 'tuganet@tuganet.pt',
-        'from_name' => 'FileGator',
+        'from_name' => 'Extranet Logista',
         'subject' => 'Novos ficheiros recebidos',
     ],
 
