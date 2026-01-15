@@ -32,7 +32,13 @@ class App
             $instance = $container->get($service['handler']);
             $container->set($key, $instance);
             $container->set($service['handler'], $instance);
-            $container->get($key)->init(isset($service['config']) ? $service['config'] : []);
+            
+            // Register by interface if not already done
+            if ($key !== $service['handler']) {
+                $container->set($key, $instance);
+            }
+            
+            $instance->init(isset($service['config']) ? $service['config'] : []);
         }
 
         $response->send();

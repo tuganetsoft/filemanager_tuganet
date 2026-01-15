@@ -75,6 +75,6 @@ class Router implements Service
             break;
         }
 
-        $this->container->call([$controller, $action], $params);
+        $this->container->call([$this->container->get($controller), $action], $params);
     }
 }
