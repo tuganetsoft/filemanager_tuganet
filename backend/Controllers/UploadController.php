@@ -14,6 +14,7 @@ use Filegator\Config\Config;
 use Filegator\Kernel\Request;
 use Filegator\Kernel\Response;
 use Filegator\Services\Auth\AuthInterface;
+use Filegator\Services\Logger\LoggerInterface;
 use Filegator\Services\Notification\NotificationInterface;
 use Filegator\Services\Storage\Filesystem;
 use Filegator\Services\Tmpfs\TmpfsInterface;
@@ -30,13 +31,16 @@ class UploadController
 
     protected $notification;
 
+    protected $logger;
+
     protected $userHomeDir;
 
-    public function __construct(Config $config, AuthInterface $auth, Filesystem $storage, TmpfsInterface $tmpfs, NotificationInterface $notification = null)
+    public function __construct(Config $config, AuthInterface $auth, Filesystem $storage, TmpfsInterface $tmpfs, LoggerInterface $logger, NotificationInterface $notification = null)
     {
         $this->config = $config;
         $this->auth = $auth;
         $this->tmpfs = $tmpfs;
+        $this->logger = $logger;
         $this->notification = $notification;
 
         $user = $this->auth->user() ?: $this->auth->getGuest();
@@ -44,6 +48,9 @@ class UploadController
 
         $this->storage = $storage;
         $this->storage->setPathPrefix($this->userHomeDir);
+        
+        $timestamp = date('Y-m-d H:i:s');
+        $this->logger->log("[{$timestamp}] UploadController: Initialized, notification service is " . ($notification ? 'AVAILABLE' : 'NULL'));
     }
 
     public function chunkCheck(Request $request, Response $response)
@@ -130,14 +137,22 @@ class UploadController
                 $this->tmpfs->remove($expired_chunk['name']);
             }
 
+            $timestamp = date('Y-m-d H:i:s');
+            $this->logger->log("[{$timestamp}] Upload: File stored successfully: {$final['filename']} to {$destination}");
+            $this->logger->log("[{$timestamp}] Upload: Notification service is " . ($this->notification ? 'AVAILABLE' : 'NULL'));
+            
             if ($res && $this->notification) {
                 try {
                     $uploadFolder = $this->normalizeUploadPath($this->userHomeDir, $destination);
                     $storedFilename = $final['filename'];
+                    $this->logger->log("[{$timestamp}] Upload: Calling notifyUpload for folder: {$uploadFolder}, file: {$storedFilename}");
                     $this->notification->notifyUpload($uploadFolder, [$storedFilename]);
+                    $this->logger->log("[{$timestamp}] Upload: notifyUpload completed");
                 } catch (\Exception $e) {
-                    // Don't let notification errors break the upload
+                    $this->logger->log("[{$timestamp}] Upload: Notification error: " . $e->getMessage());
                 }
+            } else if (!$this->notification) {
+                $this->logger->log("[{$timestamp}] Upload: Skipping notification - service not available");
             }
 
             return $res ? $response->json('Stored') : $response->json('Error storing file');
