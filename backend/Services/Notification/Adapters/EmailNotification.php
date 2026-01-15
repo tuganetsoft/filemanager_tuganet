@@ -66,17 +66,25 @@ class EmailNotification implements Service, NotificationInterface
 
     protected function findUsersForPath(string $uploadPath): array
     {
+        $timestamp = date('Y-m-d H:i:s');
         $matchedUsers = [];
         $allUsers = $this->auth->allUsers();
+        
+        $this->logger->log("[{$timestamp}] MATCHING: Total users from allUsers(): " . count($allUsers));
         
         $targetPath = '/' . trim($uploadPath, '/');
         if ($targetPath !== '/') {
             $targetPath = rtrim($targetPath, '/');
         }
         
+        $this->logger->log("[{$timestamp}] MATCHING: Target path normalized: '{$targetPath}'");
+        
         foreach ($allUsers as $user) {
             $homedir = $user->getHomeDir();
+            $this->logger->log("[{$timestamp}] MATCHING: User '{$user->getUsername()}' raw homedir: '{$homedir}'");
+            
             if (empty($homedir)) {
+                $this->logger->log("[{$timestamp}] MATCHING: User '{$user->getUsername()}' has empty homedir, skipping");
                 continue;
             }
             
@@ -85,19 +93,37 @@ class EmailNotification implements Service, NotificationInterface
                 $homedir = rtrim($homedir, '/');
             }
             
+            $this->logger->log("[{$timestamp}] MATCHING: User '{$user->getUsername()}' normalized homedir: '{$homedir}'");
+            
+            // Match users with root access
             if ($homedir === '/') {
+                $this->logger->log("[{$timestamp}] MATCHING: User '{$user->getUsername()}' has root access, MATCHED");
                 $matchedUsers[] = $user;
                 continue;
             }
             
+            // Match exact path
             if ($homedir === $targetPath) {
+                $this->logger->log("[{$timestamp}] MATCHING: User '{$user->getUsername()}' homedir matches exactly, MATCHED");
                 $matchedUsers[] = $user;
                 continue;
             }
             
+            // Match if upload is in a subdirectory of user's homedir
             if (strpos($targetPath, $homedir . '/') === 0) {
+                $this->logger->log("[{$timestamp}] MATCHING: User '{$user->getUsername()}' upload is in their subdirectory, MATCHED");
                 $matchedUsers[] = $user;
+                continue;
             }
+            
+            // Match if user's homedir is inside the upload path (user should be notified of uploads to parent folders too)
+            if (strpos($homedir, $targetPath . '/') === 0 || $homedir === $targetPath) {
+                $this->logger->log("[{$timestamp}] MATCHING: User '{$user->getUsername()}' homedir is under upload path, MATCHED");
+                $matchedUsers[] = $user;
+                continue;
+            }
+            
+            $this->logger->log("[{$timestamp}] MATCHING: User '{$user->getUsername()}' NOT matched");
         }
         
         return $matchedUsers;
