@@ -169,6 +169,7 @@ const api = {
       axios.post('storeuser', {
         role: params.role,
         name: params.name,
+        email: params.email,
         username: params.username,
         homedir: params.homedir,
         password: params.password,
@@ -183,6 +184,7 @@ const api = {
       axios.post('updateuser/'+params.key, {
         role: params.role,
         name: params.name,
+        email: params.email,
         username: params.username,
         homedir: params.homedir,
         password: params.password,
