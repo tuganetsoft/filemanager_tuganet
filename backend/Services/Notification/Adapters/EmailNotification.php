@@ -26,15 +26,13 @@ class EmailNotification implements Service, NotificationInterface
 
     protected function getAuth()
     {
-        if ($this->auth instanceof \Filegator\Services\Auth\Adapters\JsonFile) {
-            return $this->auth;
-        }
-        
-        // Try to get the real auth service from container if the one passed in is weird
         try {
             $container = \Filegator\Container\Container::getInstance();
-            return $container->get(\Filegator\Services\Auth\AuthInterface::class);
+            $auth = $container->get(\Filegator\Services\Auth\AuthInterface::class);
+            $this->logger->log("[".date('Y-m-d H:i:s')."] AUTH_DEBUG: Resolved AuthInterface from container: " . get_class($auth));
+            return $auth;
         } catch (\Exception $e) {
+            $this->logger->log("[".date('Y-m-d H:i:s')."] AUTH_DEBUG: Failed to resolve AuthInterface: " . $e->getMessage());
             return $this->auth;
         }
     }

@@ -212,7 +212,9 @@ class JsonFile implements Service, AuthInterface
 
     protected function getUsers(): array
     {
-        $users = json_decode((string) file_get_contents($this->file), true);
+        $file = $this->file ?: __DIR__.'/../../../private/users.json';
+        if (!file_exists($file)) return [];
+        $users = json_decode((string) file_get_contents($file), true);
 
         return is_array($users) ? $users : [];
     }
