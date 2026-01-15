@@ -24,6 +24,21 @@ class EmailNotification implements Service, NotificationInterface
         $this->logger = $logger;
     }
 
+    protected function getAuth()
+    {
+        if ($this->auth instanceof \Filegator\Services\Auth\Adapters\JsonFile) {
+            return $this->auth;
+        }
+        
+        // Try to get the real auth service from container if the one passed in is weird
+        try {
+            $container = \Filegator\Container\Container::getInstance();
+            return $container->get(\Filegator\Services\Auth\AuthInterface::class);
+        } catch (\Exception $e) {
+            return $this->auth;
+        }
+    }
+
     public function init(array $config = [])
     {
         $this->smtpConfig = $this->config->get('smtp', []);
@@ -44,7 +59,8 @@ class EmailNotification implements Service, NotificationInterface
             return;
         }
 
-        $users = $this->findUsersForPath($uploadPath);
+        $auth = $this->getAuth();
+        $users = $this->findUsersForPath($uploadPath, $auth);
         $this->logger->log("[{$timestamp}] NOTIFICATION: Found " . count($users) . " matching user(s) for path: {$uploadPath}");
         
         if (empty($users)) {
@@ -64,11 +80,12 @@ class EmailNotification implements Service, NotificationInterface
         }
     }
 
-    protected function findUsersForPath(string $uploadPath): array
+    protected function findUsersForPath(string $uploadPath, $auth = null): array
     {
         $timestamp = date('Y-m-d H:i:s');
         $matchedUsers = [];
-        $allUsers = $this->auth->allUsers();
+        $auth = $auth ?: $this->getAuth();
+        $allUsers = $auth->allUsers();
         
         // Convert to array to allow counting and multiple iterations
         $usersArray = [];
