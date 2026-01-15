@@ -15,7 +15,7 @@ use Filegator\Kernel\Request;
 use Filegator\Kernel\Response;
 use Filegator\Services\Auth\AuthInterface;
 use Filegator\Services\Logger\LoggerInterface;
-use Filegator\Services\Notification\NotificationInterface;
+use Filegator\Services\Notification\Adapters\EmailNotification;
 use Filegator\Services\Storage\Filesystem;
 use Filegator\Services\Tmpfs\TmpfsInterface;
 
@@ -35,24 +35,20 @@ class UploadController
 
     protected $userHomeDir;
 
-    public function __construct(Config $config, AuthInterface $auth, Filesystem $storage, TmpfsInterface $tmpfs, LoggerInterface $logger, NotificationInterface $notification = null)
+    public function __construct(Config $config, AuthInterface $auth, Filesystem $storage, TmpfsInterface $tmpfs, LoggerInterface $logger)
     {
         $this->config = $config;
         $this->auth = $auth;
         $this->tmpfs = $tmpfs;
         $this->logger = $logger;
 
-        // If notification wasn't injected, try to resolve it from the container manually
-        if (!$notification) {
-            try {
-                $container = \Filegator\Container\Container::getInstance();
-                $notification = $container->get(NotificationInterface::class);
-            } catch (\Exception $e) {
-                // Keep it null if resolution fails
-            }
+        // Create notification service directly - bypassing DI
+        try {
+            $this->notification = new EmailNotification($config, $auth, $logger);
+            $this->notification->init();
+        } catch (\Exception $e) {
+            $this->notification = null;
         }
-        
-        $this->notification = $notification;
 
         $user = $this->auth->user() ?: $this->auth->getGuest();
         $this->userHomeDir = $user->getHomeDir();
