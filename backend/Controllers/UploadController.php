@@ -116,7 +116,6 @@ class UploadController
 
         // if all the chunks are present, create final file and store it
         if ($chunks_size >= $total_size) {
-            $this->tmpfs->write($file_name, '', true); // initialize empty file
             for ($i = 1; $i <= $total_chunks; ++$i) {
                 $part = $this->tmpfs->readStream($prefix.$file_name.'.part'.$i);
                 $this->tmpfs->write($file_name, $part['stream'], true);
@@ -132,9 +131,13 @@ class UploadController
             }
 
             if ($res) {
-                $uploadFolder = $this->normalizeUploadPath($this->userHomeDir, $destination);
-                $storedFilename = $final['filename'];
-                $this->notification->notifyUpload($uploadFolder, [$storedFilename]);
+                try {
+                    $uploadFolder = $this->normalizeUploadPath($this->userHomeDir, $destination);
+                    $storedFilename = $final['filename'];
+                    $this->notification->notifyUpload($uploadFolder, [$storedFilename]);
+                } catch (\Exception $e) {
+                    // Don't let notification errors break the upload
+                }
             }
 
             return $res ? $response->json('Stored') : $response->json('Error storing file');
