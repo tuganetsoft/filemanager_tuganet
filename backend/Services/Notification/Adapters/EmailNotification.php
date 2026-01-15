@@ -70,7 +70,12 @@ class EmailNotification implements Service, NotificationInterface
         $matchedUsers = [];
         $allUsers = $this->auth->allUsers();
         
-        $this->logger->log("[{$timestamp}] MATCHING: Total users from allUsers(): " . count($allUsers));
+        // Convert to array to allow counting and multiple iterations
+        $usersArray = [];
+        foreach ($allUsers as $u) { 
+            $usersArray[] = $u; 
+        }
+        $this->logger->log("[{$timestamp}] MATCHING: Total users from allUsers(): " . count($usersArray));
         
         $targetPath = '/' . trim($uploadPath, '/');
         if ($targetPath !== '/') {
@@ -79,7 +84,7 @@ class EmailNotification implements Service, NotificationInterface
         
         $this->logger->log("[{$timestamp}] MATCHING: Target path normalized: '{$targetPath}'");
         
-        foreach ($allUsers as $user) {
+        foreach ($usersArray as $user) {
             $homedir = $user->getHomeDir();
             $this->logger->log("[{$timestamp}] MATCHING: User '{$user->getUsername()}' raw homedir: '{$homedir}'");
             
