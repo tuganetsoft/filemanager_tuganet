@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background-color: #3bafbf; color: white; padding: 20px; text-align: center; }
+        .content { padding: 20px; background-color: #f9f9f9; }
+        .file-list { background-color: white; padding: 15px; border-radius: 5px; margin: 15px 0; }
+        .file-list ul { margin: 0; padding-left: 20px; }
+        .footer { text-align: center; padding: 20px; font-size: 12px; color: #666; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>FileGator Notification</h1>
+        </div>
+        <div class="content">
+            <p>Hello <strong>{{ user_name }}</strong>,</p>
+            <p>New files have been uploaded to your folder:</p>
+            <p><strong>Folder:</strong> {{ upload_path }}</p>
+            <div class="file-list">
+                <p><strong>Uploaded files:</strong></p>
+                <ul>
+                    {{ file_list_html }}
+                </ul>
+            </div>
+        </div>
+        <div class="footer">
+            <p>This is an automated notification from FileGator.</p>
+        </div>
+    </div>
+</body>
+</html>

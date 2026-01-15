@@ -245,6 +245,16 @@ class EmailNotification implements Service, NotificationInterface
             return '<li>' . htmlspecialchars($file) . '</li>';
         }, $files));
 
+        $templateFile = dirname(__DIR__, 3) . '/Views/Emails/upload_notification.html';
+        
+        if (file_exists($templateFile)) {
+            $body = file_get_contents($templateFile);
+            $body = str_replace('{{ user_name }}', $userName, $body);
+            $body = str_replace('{{ upload_path }}', $uploadPath, $body);
+            $body = str_replace('{{ file_list_html }}', $fileListHtml, $body);
+            return $body;
+        }
+
         return <<<HTML
 <!DOCTYPE html>
 <html>
