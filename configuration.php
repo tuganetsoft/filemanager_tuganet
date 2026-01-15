@@ -18,7 +18,7 @@ return [
         'encryption' => '', // 'tls', 'ssl', or '' for none
         'from_email' => 'tuganet@tuganet.pt',
         'from_name' => 'FileGator',
-        'subject' => 'New files uploaded to your folder',
+        'subject' => 'Novos ficheiros recebidos',
     ],
 
     'frontend_config' => [
