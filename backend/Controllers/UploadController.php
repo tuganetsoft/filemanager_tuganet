@@ -219,15 +219,20 @@ class UploadController
         if ($toSend && $this->notification) {
             try {
                 $this->notification->notifyUpload($toSend['folder'], $toSend['files']);
-                $this->logger->log("[".date('Y-m-d H:i:s')."] Manual batch notification DISPATCHED for " . count($toSend['files']) . " files to " . $toSend['folder']);
+                $this->logger->log("[".date('Y-m-d H:i:s')."] Batch notification SENT for " . count($toSend['files']) . " files to " . $toSend['folder']);
                 
                 // Only remove from queue after successful send
                 $lock = @fopen($lockFile, 'c');
                 if ($lock && flock($lock, LOCK_EX)) {
                     try {
-                        $queue = json_decode(file_get_contents($queueFile), true) ?: [];
+                        // Re-read queue to avoid race conditions
+                        $queue = [];
+                        if (file_exists($queueFile)) {
+                            $queue = json_decode(file_get_contents($queueFile), true) ?: [];
+                        }
                         unset($queue[$folderKey]);
                         file_put_contents($queueFile, json_encode($queue), LOCK_EX);
+                        $this->logger->log("[".date('Y-m-d H:i:s')."] Queue entry removed for folder: {$uploadFolder}");
                     } finally {
                         flock($lock, LOCK_UN);
                         fclose($lock);
@@ -236,7 +241,7 @@ class UploadController
                 
                 return $response->json('Notification sent');
             } catch (\Exception $e) {
-                $this->logger->log("[".date('Y-m-d H:i:s')."] Manual batch notification error: " . $e->getMessage());
+                $this->logger->log("[".date('Y-m-d H:i:s')."] Batch notification error: " . $e->getMessage());
                 return $response->json('Error sending notification: ' . $e->getMessage(), 500);
             }
         }

@@ -31,10 +31,10 @@
         </div>
         <div v-if="!activeUploads && allUploadsComplete && !notificationSent" class="notification-section">
           <div class="is-flex is-justify-between is-align-items-center">
-            <span class="notification-text">{{ lang('Send email notification?') }}</span>
+            <span class="notification-text">{{ lang('Auto-sending notification in 5 seconds...') }}</span>
             <button class="button is-primary is-small" @click="sendNotification" :disabled="sendingNotification">
               <span v-if="sendingNotification">{{ lang('Sending...') }}</span>
-              <span v-else>{{ lang('Send Notification') }}</span>
+              <span v-else>{{ lang('Send Now') }}</span>
             </button>
           </div>
           <hr>
@@ -85,6 +85,8 @@ export default {
       notificationSent: false,
       sendingNotification: false,
       uploadFolder: null,
+      autoNotifyTimer: null,
+      autoNotifyDelay: 5000, // 5 seconds delay before auto-sending notification
     }
   },
   computed: {
@@ -96,6 +98,19 @@ export default {
       if (this.resumable.files.length === 0) return false
       // Check if all files are complete (progress = 1) and no errors
       return this.resumable.files.every(file => file.isComplete() && !file.file.uploadingError)
+    },
+  },
+  watch: {
+    allUploadsComplete(newVal) {
+      // Auto-trigger notification when all uploads complete
+      if (newVal && !this.notificationSent && !this.sendingNotification) {
+        this.scheduleAutoNotification()
+      }
+    },
+    'files' (files) {
+      _.forEach(files, file => {
+        this.resumable.addFile(file)
+      })
     },
   },
   watch: {
@@ -196,6 +211,7 @@ export default {
       this.notificationSent = false
       this.sendingNotification = false
       this.uploadFolder = null
+      this.clearAutoNotifyTimer()
     },
     toggleWindow() {
       this.progressVisible = ! this.progressVisible
@@ -212,6 +228,8 @@ export default {
     sendNotification() {
       if (!this.uploadFolder) return
       this.sendingNotification = true
+      // Clear any pending auto-notification timer
+      this.clearAutoNotifyTimer()
       api.sendBatchNotification({ folder: this.uploadFolder })
         .then(() => {
           this.notificationSent = true
@@ -227,6 +245,27 @@ export default {
           this.handleError(error)
         })
     },
+    scheduleAutoNotification() {
+      // Clear any existing timer
+      this.clearAutoNotifyTimer()
+      
+      // Schedule auto-notification after delay
+      this.autoNotifyTimer = setTimeout(() => {
+        if (this.uploadFolder && !this.notificationSent && this.allUploadsComplete) {
+          this.sendNotification()
+        }
+      }, this.autoNotifyDelay)
+    },
+    clearAutoNotifyTimer() {
+      if (this.autoNotifyTimer) {
+        clearTimeout(this.autoNotifyTimer)
+        this.autoNotifyTimer = null
+      }
+    },
+  },
+  beforeDestroy() {
+    // Clean up timer when component is destroyed
+    this.clearAutoNotifyTimer()
   },
 }
 </script>
