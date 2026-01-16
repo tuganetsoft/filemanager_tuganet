@@ -76,8 +76,12 @@ const data = {
   'Guest': 'Convidado',
   'Show hidden': 'Mostrar ocultos',
   'Show symbolic format': 'Mostrar formato simbólico',
-  'Hide symbolic format': 'Ocultar formato simbólico'
-}
+  'Hide symbolic format': 'Ocultar formato simbólico',
+  'Send email notification?': 'Enviar notificação por email?',
+  'Send Notification': 'Enviar notificação',
+  'Sending...': 'Enviando...',
+  'Notification sent!': 'Notificação enviada!'  
+  }
 
 export default data
 

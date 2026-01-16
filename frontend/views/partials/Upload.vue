@@ -31,7 +31,7 @@
         </div>
         <div v-if="!activeUploads && allUploadsComplete && !notificationSent" class="notification-section">
           <div class="is-flex is-justify-between is-align-items-center">
-            <span class="notification-text">{{ lang('Send email notification?') }}</span>
+            <span class="notification-text">({{ lang('Send email notification?') }})</span>
             <button class="button is-primary is-small" @click="sendNotification" :disabled="sendingNotification">
               <span v-if="sendingNotification">{{ lang('Sending...') }}</span>
               <span v-else>{{ lang('Send Notification') }}</span>
