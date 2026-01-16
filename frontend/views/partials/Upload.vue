@@ -113,13 +113,6 @@ export default {
       })
     },
   },
-  watch: {
-    'files' (files) {
-      _.forEach(files, file => {
-        this.resumable.addFile(file)
-      })
-    },
-  },
   mounted() {
     this.resumable = new Resumable({
       target: Vue.config.baseURL+'/upload',
