@@ -221,6 +221,10 @@ export default {
             type: 'is-success',
             queue: false,
           })
+          // Close the window after a short delay so the user sees the success state
+          setTimeout(() => {
+            this.closeWindow()
+          }, 1000)
         })
         .catch(error => {
           this.sendingNotification = false
